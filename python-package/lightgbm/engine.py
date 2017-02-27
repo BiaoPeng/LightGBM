@@ -292,7 +292,7 @@ def cv(params, train_set, num_boost_round=10,
         Data to be trained.
     num_boost_round : int
         Number of boosting iterations.
-	data_splitter : an instance with split(X) method
+    data_splitter : an instance with split(X) method
         Instance with split(X) method.
     nfold : int
         Number of folds in CV.
