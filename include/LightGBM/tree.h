@@ -34,6 +34,7 @@ public:
   * \brief Performing a split on tree leaves.
   * \param leaf Index of leaf to be split
   * \param feature Index of feature; the converted index after removing useless features
+  * \param bin_type type of this feature, numerical or categorical
   * \param threshold Threshold(bin) of split
   * \param real_feature Index of feature, the original index on data
   * \param threshold_double Threshold on feature value
@@ -44,7 +45,7 @@ public:
   * \param gain Split gain
   * \return The index of new leaf.
   */
-  int Split(int leaf, int feature, uint32_t threshold, int real_feature,
+  int Split(int leaf, int feature, BinType bin_type, uint32_t threshold, int real_feature,
     double threshold_double, double left_value,
     double right_value, data_size_t left_cnt, data_size_t right_cnt, double gain);
 
@@ -114,6 +115,15 @@ public:
   std::string ToJSON();
 
   template<typename T>
+  static bool CategoricalDecision(T fval, T threshold) {
+    if (static_cast<int>(fval) == static_cast<int>(threshold)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  template<typename T>
   static bool NumericalDecision(T fval, T threshold) {
     if (fval <= threshold) {
       return true;
@@ -121,6 +131,17 @@ public:
       return false;
     }
   }
+
+  static const char* GetDecisionTypeName(int8_t type) {
+    if (type == 0) {
+      return "no_greater";
+    } else {
+      return "is";
+    }
+  }
+
+  static std::vector<bool(*)(uint32_t, uint32_t)> inner_decision_funs;
+  static std::vector<bool(*)(double, double)> decision_funs;
 
 private:
 
@@ -157,6 +178,8 @@ private:
   std::vector<uint32_t> threshold_in_bin_;
   /*! \brief A non-leaf node's split threshold in feature value */
   std::vector<double> threshold_;
+  /*! \brief Decision type, 0 for '<='(numerical feature), 1 for 'is'(categorical feature) */
+  std::vector<int8_t> decision_type_;
   /*! \brief A non-leaf node's split gain */
   std::vector<double> split_gain_;
   // used for leaf node
@@ -190,7 +213,7 @@ inline int Tree::GetLeaf(std::vector<std::unique_ptr<BinIterator>>& iterators,
   data_size_t data_idx) const {
   int node = 0;
   while (node >= 0) {
-    if (NumericalDecision<uint32_t>(
+    if (inner_decision_funs[decision_type_[node]](
       iterators[node]->Get(data_idx),
       threshold_in_bin_[node])) {
       node = left_child_[node];
@@ -205,7 +228,7 @@ inline int Tree::GetLeafRaw(std::vector<std::unique_ptr<BinIterator>>& iterators
   data_size_t data_idx) const {
   int node = 0;
   while (node >= 0) {
-    if (NumericalDecision<uint32_t>(
+    if (inner_decision_funs[decision_type_[node]](
       iterators[split_feature_inner[node]]->Get(data_idx),
       threshold_in_bin_[node])) {
       node = left_child_[node];
@@ -219,7 +242,7 @@ inline int Tree::GetLeafRaw(std::vector<std::unique_ptr<BinIterator>>& iterators
 inline int Tree::GetLeaf(const double* feature_values) const {
   int node = 0;
   while (node >= 0) {
-    if (NumericalDecision<double>(
+    if (decision_funs[decision_type_[node]](
         feature_values[split_feature_[node]],
         threshold_[node])) {
       node = left_child_[node];
